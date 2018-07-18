@@ -5,11 +5,7 @@ import argparse
 import cv2
 import os
 import pickle
-
-from keras.models import model_from_json
-from keras.models import load_model
-from keras.utils import CustomObjectScope
-import tensorflow as tf
+from PIL import Image, ImageFont, ImageDraw, ImageEnhance
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--with_draw', help='do draw?', default='True')
@@ -56,7 +52,6 @@ for idx in range(length):
     # if idx%3 != 0: continue
     # if idx < 200: continue
     
-    print (img_bgr.shape)
     start = cv2.getTickCount()
     
     ### preprocess
@@ -107,28 +102,52 @@ for idx in range(length):
     face_encodings = face_recognition.face_encodings(img_rgb, list_bboxes)
     closest_distances = knn_clf.kneighbors(face_encodings, n_neighbors=1)
     is_recognized = [closest_distances[0][i][0] <= 0.4 for i in range(len(list_bboxes))]
-    list_reconized_face = [(pred, loc) if rec else ("unknown", loc) for pred, loc, rec in zip(knn_clf.predict(face_encodings), list_bboxes, is_recognized)]
+    list_reconized_face = [(pred, loc, conf) if rec else ("unknown", loc, conf) for pred, loc, rec, conf in zip(knn_clf.predict(face_encodings), list_bboxes, is_recognized, list_confidence)]
     # print (list_reconized_face)
 
     time = (cv2.getTickCount() - start) / cv2.getTickFrequency() * 1000
     print ('%d, elapsed time: %.3fms'%(idx,time))
 
+    ### blurring
+    img_bgr_blur = img_bgr_ori.copy()
+    for name, bbox, conf in list_reconized_face:
+        t,r,b,l = bbox
+        if name == 'unknown':
+            face = img_bgr_blur[t:b, l:r]
+            small = cv2.resize(face, None, fx=.05, fy=.05, interpolation=cv2.INTER_NEAREST)
+            blurred_face = cv2.resize(small, (face.shape[:2]), interpolation=cv2.INTER_NEAREST)
+            img_bgr_blur[t:b, l:r] = blurred_face
+
     ### draw rectangle bbox
     if args.with_draw == 'True':
-        for named_face, confidence in zip(list_reconized_face, list_confidence):
-            name, bbox = named_face
+        source_img = Image.fromarray(img_bgr_ori)
+        draw = ImageDraw.Draw(source_img)
+        for name, bbox, confidence in list_reconized_face:
             t,r,b,l = bbox
+            # print (int((r-l)/img_bgr_ori.shape[1]*100))
+            font_size = int((r-l)/img_bgr_ori.shape[1]*100)
 
-            cv2.rectangle(img_bgr_ori, (l, t), (r, b),
-                (0, 255, 0), 2)
-            text = "%s: %.2f" % (name,confidence)
-            text_size, base_line = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
-            y = t #- 1 if t - 1 > 1 else t + 1
-            cv2.rectangle(img_bgr_ori, (l,y-text_size[1]),(l+text_size[0], y+base_line), (0,255,0), -1)
-            cv2.putText(img_bgr_ori, text, (l, y),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+            draw.rectangle(((l,t),(r,b)), outline=(0,255,128))
 
-        cv2.imshow('show', img_bgr_ori)
-        key = cv2.waitKey(1)
+            draw.rectangle(((l,t-font_size-2),(r,t+2)), fill=(0,255,128))
+            draw.text((l, t - font_size), name, font=ImageFont.truetype('./BMDOHYEON_TTF.TTF', font_size), fill=(0,0,0,0))
+
+        show = np.asarray(source_img)
+        cv2.imshow('show', show)
+        cv2.imshow('blur', img_bgr_blur)
+        key = cv2.waitKey(30)
         if key == 27:
             break
+
+
+### opencv text, box drawing
+# cv2.rectangle(img_bgr_blur, (l, t), (r, b), (0, 255, 0), 2)
+
+# cv2.rectangle(img_bgr_ori, (l, t), (r, b), (0, 255, 128), 2)
+# text = "%s: %.2f" % (name,confidence)
+# text_size, base_line = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+# y = t #- 1 if t - 1 > 1 else t + 1
+# cv2.rectangle(img_bgr_ori, 
+#             (l,y-text_size[1]),(l+text_size[0], y+base_line), (0,255,0), -1)
+# cv2.putText(img_bgr_ori, text, (l, y), 
+#             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
