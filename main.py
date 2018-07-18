@@ -1,14 +1,23 @@
 from __future__ import print_function
 import numpy as np
-import cv2
-import argparse
 import face_recognition
+import argparse
+import cv2
+import os
+import pickle
+
+from keras.models import model_from_json
+from keras.models import load_model
+from keras.utils import CustomObjectScope
+import tensorflow as tf
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--with_draw', help='do draw?', default='True')
 args = parser.parse_args()
 
 net = cv2.dnn.readNetFromCaffe('./models/deploy.prototxt.txt', './models/res10_300x300_ssd_iter_140000.caffemodel')
+
+knn_clf = pickle.load(open('./models/fr_knn.pkl', 'rb'))
 
 def adjust_gamma(image, gamma=1.0):
     # build a lookup table mapping the pixel values [0, 255] to
@@ -31,7 +40,8 @@ def preprocess(img):
             break
     return img
 
-vc = cv2.VideoCapture('./data/TAEYANG_ONLY_LOOK_AT_ME_MV.mp4')
+# vc = cv2.VideoCapture('./data/TAEYANG_ONLY_LOOK_AT_ME_MV.mp4')
+vc = cv2.VideoCapture('./data/gd_and_ty.mp4')
 
 length = int(vc.get(cv2.CAP_PROP_FRAME_COUNT))
 print ('length :', length)
@@ -43,9 +53,10 @@ for idx in range(length):
     img_bgr = vc.read()[1]
     if img_bgr is None:
         break
-    if idx%3 != 0: continue
-    if idx < 200: continue
+    # if idx%3 != 0: continue
+    # if idx < 200: continue
     
+    print (img_bgr.shape)
     start = cv2.getTickCount()
     
     ### preprocess
@@ -94,18 +105,23 @@ for idx in range(length):
 
     ### facenet
     face_encodings = face_recognition.face_encodings(img_rgb, list_bboxes)
+    closest_distances = knn_clf.kneighbors(face_encodings, n_neighbors=1)
+    is_recognized = [closest_distances[0][i][0] <= 0.4 for i in range(len(list_bboxes))]
+    list_reconized_face = [(pred, loc) if rec else ("unknown", loc) for pred, loc, rec in zip(knn_clf.predict(face_encodings), list_bboxes, is_recognized)]
+    # print (list_reconized_face)
 
     time = (cv2.getTickCount() - start) / cv2.getTickFrequency() * 1000
     print ('%d, elapsed time: %.3fms'%(idx,time))
 
     ### draw rectangle bbox
     if args.with_draw == 'True':
-        for bbox, confidence in zip(list_bboxes, list_confidence):
+        for named_face, confidence in zip(list_reconized_face, list_confidence):
+            name, bbox = named_face
             t,r,b,l = bbox
-            
+
             cv2.rectangle(img_bgr_ori, (l, t), (r, b),
                 (0, 255, 0), 2)
-            text = "face: %.2f" % confidence
+            text = "%s: %.2f" % (name,confidence)
             text_size, base_line = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
             y = t #- 1 if t - 1 > 1 else t + 1
             cv2.rectangle(img_bgr_ori, (l,y-text_size[1]),(l+text_size[0], y+base_line), (0,255,0), -1)

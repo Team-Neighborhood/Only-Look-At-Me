@@ -25,6 +25,7 @@ NOTE: This example requires scikit-learn to be installed! You can install it wit
 $ pip3 install scikit-learn
 """
 
+import os
 from math import sqrt
 from sklearn import neighbors
 from os import listdir
@@ -160,5 +161,5 @@ if __name__ == "__main__":
         # preds = predict(join("./data/test", img_path), knn_clf=knn_clf)
         preds = predict(join("./data/test", img_path), model_save_path='./models/fr_knn.pkl', DIST_THRESH=0.4)
         
-        print(preds)
+        print(os.path.basename(img_path), preds)
         # draw_preds(join("./data/test", img_path), preds)
