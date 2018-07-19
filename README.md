@@ -11,6 +11,15 @@
     Press F5 button for sync gif files
 </p>
 
+## Why need this project
+
+<p align="center">
+    <img src='./image/capture.jpg', width=30%>
+    <img src='./image/capture2.jpg', width=30%>
+    <br>
+    나도 모르게 찍게 되는 타인의 초상권, 프라이버시를 보호합시다.
+</p>
+
 ## Requirements
 - python 3
 - Pillow
